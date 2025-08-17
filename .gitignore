@@ -1,0 +1,109 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyTorch
+*.pth
+*.pt
+!**/checkpoints/*.pth
+!**/checkpoints/*.pt
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+results/
+logs/
+examples/results/
+examples/*.jpg
+examples/*.png
+examples/*.jpeg
+*.log
+
+# Model downloads
+models/
+checkpoints/downloads/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore virtual environments
+venv/
+.env/
+
+# Ignore checkpoints and large files
+*.ckpt
+*.pth
+*.h5
+*.pt
+checkpoints/
+logs/
+outputs/
+models/
+*.zip
+*.tar.gz
+*.mp4
+*.avi
+*.mov
+*.jpg
+*.png
+*.npy
+*.npz
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/

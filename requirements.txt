@@ -1,0 +1,34 @@
+# GET_CAPTION - Unified Image Captioning with Object Detection
+# Core dependencies
+torch>=2.0.0
+torchvision>=0.15.0
+pillow>=9.0.0
+numpy>=1.21.0
+scipy>=1.7.0
+
+# Computer Vision
+ultralytics>=8.0.0  # YOLOv8 and SAM2
+opencv-python>=4.5.0
+
+# NLP and Transformers
+transformers>=4.20.0
+tokenizers>=0.13.0
+
+# Logging and utilities
+colorlog>=6.0.0
+tqdm>=4.60.0
+packaging>=21.0  # For version parsing (replaces pkg_resources)
+
+# Image processing
+matplotlib>=3.5.0
+
+# Configuration (optional, for future YAML support)
+pyyaml>=6.0
+
+# Development dependencies (optional)
+pytest>=7.0.0
+black>=22.0.0
+flake8>=4.0.0
+
+# AlphaCLIP dependencies (already included in the project)
+# Note: AlphaCLIP is included as a submodule, no additional install needed
