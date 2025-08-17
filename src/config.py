@@ -1,6 +1,7 @@
 """Configuration management for GET_CAPTION project."""
 
 import os
+import torch
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
@@ -12,8 +13,8 @@ class ModelPathsConfig:
     models_root: str = "models/"
     
     # AlphaCLIP model paths
-    alpha_clip_root: str = "models/alpha_clip/"
-    alpha_clip_checkpoints: str = "models/alpha_clip/checkpoints/"
+    alpha_clip_root: str = "AlphaCLIP/"
+    alpha_clip_checkpoints: str = "AlphaCLIP/checkpoints/"
     
     # Detection model paths
     detection_root: str = "models/detection/"
@@ -61,7 +62,7 @@ class ModelPathsConfig:
 class ModelConfig:
     """Model configuration settings."""
     # AlphaCLIP settings
-    alpha_clip_model: str = "ViT-L/14"  # ViT-B/32, ViT-B/16, ViT-L/14, RN50
+    alpha_clip_model: str = "ViT-B/16"  # ViT-B/32, ViT-B/16, ViT-L/14, RN50
     
     # Language model settings
     lm_model: str = "bert-base-uncased"  # or roberta-base
@@ -73,7 +74,7 @@ class ModelConfig:
     
     # SAM2 settings
     sam_model: str = "sam2_t.pt"  # sam2_t.pt (tiny), sam2_s.pt (small), sam2_b.pt (base), sam2_l.pt (large)
-    
+    TORCH_USE_CUDA_DSA = True
     # Device settings
     device: str = "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") else "cpu"
 

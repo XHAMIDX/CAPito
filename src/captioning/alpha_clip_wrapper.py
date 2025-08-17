@@ -19,7 +19,7 @@ class AlphaCLIPWrapper:
     
     def __init__(
         self,
-        model_name: str = "ViT-L/14",
+        model_name: str = "ViT-B/16",
         device: str = "cpu"
     ):
         """Initialize AlphaCLIP wrapper.
@@ -53,12 +53,17 @@ class AlphaCLIPWrapper:
             # Try to get checkpoint path from config if available
             checkpoint_path = None
             try:
-                from ..config import ModelPathsConfig
+                # Add project root to path for absolute import
+                project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+                if project_root not in sys.path:
+                    sys.path.insert(0, project_root)
+                from src.config import ModelPathsConfig
                 model_paths = ModelPathsConfig()
                 checkpoint_path = model_paths.get_alpha_clip_path(self.model_name)
                 if not os.path.exists(checkpoint_path):
                     checkpoint_path = None
-            except ImportError:
+            except ImportError as e:
+                self.logger.error(f"Failed to import ModelPathsConfig: {e}")
                 pass
             
             # Load model

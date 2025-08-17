@@ -214,6 +214,23 @@ class ModelManager:
         
         return available
     
+    def check_required_models(self) -> None:
+        """Check if required models are present, raise error if any are missing."""
+        required = [
+            "clip_b16_grit1m_fultune_8xe.pth",
+            "clip_l14_grit1m_fultune_8xe.pth",
+            "clip_l14_336_grit1m_fultune_8xe.pth",
+            "yolov8n.pt",
+            "sam2_t.pt"
+        ]
+        missing = []
+        for model in required:
+            path = self.get_model_path(model)
+            if not os.path.exists(path):
+                missing.append(model)
+        if missing:
+            raise FileNotFoundError(f"Missing required models: {missing}. Please run 'python setup.py download_models' to download them.")
+
     def cleanup_old_structure(self) -> List[str]:
         """Clean up old model structure after migration.
         
@@ -249,6 +266,9 @@ def setup_model_environment() -> ModelManager:
     
     # Organize existing models
     moved_files = manager.organize_existing_models()
+    
+    # Check required models
+    manager.check_required_models()
     
     # Log what was moved
     for source, files in moved_files.items():

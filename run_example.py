@@ -7,12 +7,12 @@ from pathlib import Path
 sys.path.append("src")
 
 from main_pipeline import GetCaptionPipeline
-from config import Config
+from src.config import Config
 
 def main():
     # Setup configuration
     config = Config()
-    config.model.device = "cuda:9"  # Change to "cuda" if you have GPU
+    config.model.device = "cuda"  # Change to "cuda" if you have GPU
     config.processing.samples_num = 1  # One caption per object
     config.generation.num_iterations = 10  # Faster generation
     
