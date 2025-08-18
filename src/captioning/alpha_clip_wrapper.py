@@ -279,7 +279,8 @@ class AlphaCLIPWrapper:
         self,
         image: Image.Image,
         alpha_mask: torch.Tensor,
-        text_candidates: List[str]
+        text_candidates: List[str],
+        image_embeds: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Score text candidates against masked image.
         
@@ -287,6 +288,7 @@ class AlphaCLIPWrapper:
             image: PIL Image
             alpha_mask: Alpha mask tensor
             text_candidates: List of text candidates to score
+            image_embeds: Optional precomputed image embeddings for efficiency
             
         Returns:
             Tuple of (normalized_scores, raw_scores)
@@ -303,10 +305,11 @@ class AlphaCLIPWrapper:
             self.logger.info(f"Image size: {image.size}, mode: {image.mode}")
             self.logger.info(f"Alpha mask shape: {alpha_mask.shape}, device: {alpha_mask.device}")
             
-            # Encode image with mask
-            self.logger.info("Encoding image with mask...")
-            image_embeds = self.encode_image_with_mask(image, alpha_mask)
-            self.logger.info(f"Image encoding shape: {image_embeds.shape}")
+            # Encode image with mask if not provided
+            if image_embeds is None:
+                self.logger.info("Encoding image with mask...")
+                image_embeds = self.encode_image_with_mask(image, alpha_mask)
+                self.logger.info(f"Image encoding shape: {image_embeds.shape}")
             
             # Encode text candidates
             self.logger.info("Encoding text candidates...")

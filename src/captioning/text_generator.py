@@ -286,8 +286,11 @@ class TextGenerator:
                     # Score candidates with CLIP
                     self.logger.debug(f"    Scoring {len(candidate_texts)} candidates with CLIP")
                     try:
+                        # Precompute image embeddings once per iteration
+                        if pos == positions[0]:
+                            precomputed_image_embeds = self.clip_wrapper.encode_image_with_mask(image, alpha_mask)
                         clip_scores, _ = self.clip_wrapper.score_text_candidates(
-                            image, alpha_mask, candidate_texts
+                            image, alpha_mask, candidate_texts, image_embeds=precomputed_image_embeds
                         )
                     except Exception as e:
                         self.logger.error(f"Error during CLIP scoring: {e}")
@@ -338,7 +341,7 @@ class TextGenerator:
                 # Score complete caption
                 try:
                     complete_scores, _ = self.clip_wrapper.score_text_candidates(
-                        image, alpha_mask, [current_text]
+                        image, alpha_mask, [current_text], image_embeds=precomputed_image_embeds
                     )
                     # Handle tensor dimensions safely
                     if complete_scores.dim() > 0:

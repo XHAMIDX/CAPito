@@ -13,10 +13,12 @@ def main():
     # Setup configuration
     config = Config()
     config.model.device = "cpu"  # Change to "cuda" if you have GPU
-    config.processing.samples_num = 1  # One caption per object
-    config.generation.num_iterations = 5  # Faster generation (default: 15)
-    config.generation.candidate_k = 20  # Fewer candidates (default: 50)
-    config.generation.sentence_len = 10  # Shorter sentences (default: 8)
+    # Keep memory low
+    config.processing.samples_num = 1
+    config.processing.max_objects_per_image = 3
+    config.generation.num_iterations = 3
+    config.generation.candidate_k = 10
+    config.generation.sentence_len = 8
     
     # Initialize pipeline
     print("🚀 Initializing GET_CAPTION pipeline...")

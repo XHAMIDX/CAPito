@@ -34,6 +34,11 @@ class MaskGenerator:
         self.use_sam = SAM_AVAILABLE
         self.logger = logging.getLogger(__name__)
         
+        # Allow disabling SAM via environment variable to reduce memory/CPU
+        if os.getenv("GET_CAPTION_DISABLE_SAM", "").lower() in ("1", "true", "yes"): 
+            self.logger.info("GET_CAPTION_DISABLE_SAM is set; using bbox-based masks instead of SAM2")
+            self.use_sam = False
+
         if self.use_sam:
             self._load_sam_model()
         else:
