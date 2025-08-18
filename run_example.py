@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+import argparse
 
 
 sys.path.append(".")
@@ -10,9 +11,18 @@ from src.main_pipeline import GetCaptionPipeline
 from src.config import Config
 
 def main():
+    parser = argparse.ArgumentParser(description="Run GET_CAPTION on a single image")
+    parser.add_argument("image_path", help="Path to the input image")
+    parser.add_argument("--output_dir", default="results", help="Directory to save results")
+    parser.add_argument("--device", choices=["cpu", "cuda"], help="Override device to use")
+    args = parser.parse_args()
+
     # Setup configuration
     config = Config()
-    config.model.device = "cpu"  # Change to "cuda" if you have GPU
+    if args.device:
+        config.model.device = args.device
+    else:
+        config.model.device = "cpu"  # Change to "cuda" if you have GPU
     # Keep memory low
     config.processing.samples_num = 1
     config.processing.max_objects_per_image = 3
@@ -24,14 +34,14 @@ def main():
     print("🚀 Initializing GET_CAPTION pipeline...")
     pipeline = GetCaptionPipeline(config)
     
-    # Process the example image
-    image_path = "examples/Screenshot 2025-07-15 173624.png"
+    # Process provided image
+    image_path = args.image_path
     print(f"📸 Processing: {image_path}")
     
     # Run the pipeline
     results = pipeline.process_single_image(
         image_path=image_path,
-        output_dir="results",
+        output_dir=args.output_dir,
         save_intermediate=True
     )
     
