@@ -54,8 +54,9 @@ def main():
     logger.info("Starting model migration for GET_CAPTION project")
     
     try:
-        # Initialize model manager
-        model_manager = setup_model_environment()
+        # Initialize model manager without pre-check to allow downloads first
+        from src.utils.model_manager import ModelManager
+        model_manager = ModelManager()
         
         # List current models
         if args.list:
@@ -67,13 +68,11 @@ def main():
                 else:
                     logger.info(f"  {category}: None")
         
-        # Download all models if requested
+        # Download all models if requested (do this before any required-model check)
         if args.download_all:
             logger.info("Downloading all available models...")
             downloaded = model_manager.download_all_models(force=args.force)
             logger.info(f"Downloaded {len(downloaded)} models")
-            
-            # List downloaded models
             for model_name, path in downloaded.items():
                 logger.info(f"  {model_name}: {path}")
         
@@ -88,14 +87,17 @@ def main():
             else:
                 logger.info("No cleanup needed")
         
+        # After optional downloads, verify required models
+        try:
+            model_manager.check_required_models()
+            logger.info("All required models are present.")
+        except FileNotFoundError as e:
+            logger.warning(str(e))
+
         # Show final structure
         logger.info("\nFinal model structure:")
         logger.info(f"  Models root: {model_manager.model_paths.models_root}")
-        logger.info(f"  AlphaCLIP: {model_manager.model_paths.alpha_clip_checkpoints}")
-        logger.info(f"  YOLO models: {model_manager.model_paths.yolo_models}")
-        logger.info(f"  SAM2 models: {model_manager.model_paths.sam_models}")
-        logger.info(f"  Language models: {model_manager.model_paths.language_models_root}")
-        logger.info(f"  Legacy models: {model_manager.model_paths.legacy_root}")
+        logger.info(f"  All models are stored under this directory.")
         
         logger.info("\nMigration completed successfully!")
         

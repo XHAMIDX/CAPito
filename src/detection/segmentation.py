@@ -47,19 +47,24 @@ class MaskGenerator:
     def _load_sam_model(self) -> None:
         """Load SAM2 model with improved error handling."""
         try:
-            # Check if model file exists and is valid
-            if os.path.exists(self.model_name):
-                file_size = os.path.getsize(self.model_name)
-                if file_size < 1024:  # Less than 1KB indicates corrupted file
-                    raise ValueError(f"Model file {self.model_name} appears to be corrupted (size: {file_size} bytes)")
-                
-                self.logger.info(f"Loading SAM2 model from local path: {self.model_name}")
-                self.model = SAM(self.model_name)
+            # If a path under Model/ is provided but doesn't exist yet, let ultralytics auto-download using the base name
+            model_arg = self.model_name
+            if isinstance(model_arg, str) and not os.path.exists(model_arg):
+                try:
+                    self.model = SAM(model_arg)
+                except Exception:
+                    base_name = os.path.basename(model_arg)
+                    self.logger.info(f"Falling back to SAM base name: {base_name}")
+                    self.model = SAM(base_name)
             else:
-                # Try to download the model
-                self.logger.info(f"Downloading SAM2 model: {self.model_name}")
-                self.model = SAM(self.model_name)
-            
+                # Check if model file exists and is valid
+                if os.path.exists(model_arg):
+                    file_size = os.path.getsize(model_arg)
+                    if file_size < 1024:
+                        raise ValueError(f"Model file {model_arg} appears to be corrupted (size: {file_size} bytes)")
+                self.logger.info(f"Loading SAM2 model from: {model_arg}")
+                self.model = SAM(model_arg)
+
             self.model.to(self.device)
             self.logger.info(f"Successfully loaded SAM2 model: {self.model_name} on {self.device}")
             

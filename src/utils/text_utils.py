@@ -33,9 +33,8 @@ def format_caption(
     caption = clean_text(caption)
     
     if object_name and confidence:
-        # Add object information as prefix
-        prefix = f"[{object_name} ({confidence:.2f})] "
-        caption = prefix + caption
+        # Create a more descriptive caption
+        caption = f"A {object_name} which {caption} (confidence: {confidence:.2f})"
     
     return caption
 

@@ -12,7 +12,7 @@ from src.config import Config
 
 def main():
     parser = argparse.ArgumentParser(description="Run GET_CAPTION on a single image")
-    parser.add_argument("image_path", help="Path to the input image")
+    parser.add_argument("image_path", help="Path to the input image",default="examples/cat.png")
     parser.add_argument("--output_dir", default="results", help="Directory to save results")
     parser.add_argument("--device", choices=["cpu", "cuda"], help="Override device to use")
     args = parser.parse_args()

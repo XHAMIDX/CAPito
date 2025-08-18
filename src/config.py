@@ -10,29 +10,27 @@ from typing import List, Optional, Tuple
 class ModelPathsConfig:
     """Centralized model paths configuration."""
     # Base paths
-    models_root: str = "models/"
+    models_root: str = "Model/"
     
     # AlphaCLIP model paths
-    alpha_clip_root: str = "AlphaCLIP/"
-    alpha_clip_checkpoints: str = "AlphaCLIP/checkpoints/"
+    alpha_clip_root: str = "Model/"
+    alpha_clip_checkpoints: str = "Model/"
     
     # Detection model paths
-    detection_root: str = "models/detection/"
-    yolo_models: str = "models/detection/yolo/"
-    sam_models: str = "models/detection/sam/"
+    detection_root: str = "Model/"
+    yolo_models: str = "Model/"
+    sam_models: str = "Model/"
     
     # Language model paths
-    language_models_root: str = "models/language/"
+    language_models_root: str = "Model/"
     
     # Legacy model paths
-    legacy_root: str = "models/legacy/"
+    legacy_root: str = "Model/"
     
     def __post_init__(self):
         """Create all necessary directories."""
-        for path in [self.models_root, self.alpha_clip_root, self.alpha_clip_checkpoints,
-                    self.detection_root, self.yolo_models, self.sam_models,
-                    self.language_models_root, self.legacy_root]:
-            os.makedirs(path, exist_ok=True)
+        # Ensure the unified Model directory exists
+        os.makedirs(self.models_root, exist_ok=True)
     
     def get_alpha_clip_path(self, model_name: str) -> str:
         """Get full path for AlphaCLIP model."""
@@ -46,16 +44,12 @@ class ModelPathsConfig:
         }
         
         checkpoint_file = model_mapping.get(model_name, "clip_b16_grit1m_fultune_8xe.pth")
-        return os.path.join(self.alpha_clip_checkpoints, checkpoint_file)
+        return os.path.join(self.models_root, checkpoint_file)
     
     def get_detection_model_path(self, model_name: str) -> str:
         """Get full path for detection model."""
-        if model_name.startswith("yolo"):
-            return os.path.join(self.yolo_models, model_name)
-        elif model_name.startswith("sam"):
-            return os.path.join(self.sam_models, model_name)
-        else:
-            return model_name  # Return as-is for ultralytics auto-download
+        # All models are centralized under the unified Model directory
+        return os.path.join(self.models_root, model_name)
 
 
 @dataclass

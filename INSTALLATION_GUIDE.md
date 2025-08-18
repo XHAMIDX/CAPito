@@ -47,13 +47,11 @@ After deploying to your server, download all required checkpoints:
 #### 1. AlphaCLIP Checkpoints (Required)
 
 ```bash
-# Create checkpoints directory
-mkdir -p AlphaCLIP/checkpoints
-
-# Download all available AlphaCLIP models
-cd AlphaCLIP/checkpoints
+# Create unified Model directory
+mkdir -p Model
 
 # GRIT-1M trained models
+cd Model
 wget -O clip_b16_grit1m_fultune_8xe.pth "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_b16_grit1m_fultune_8xe.pth"
 wget -O clip_l14_grit1m_fultune_8xe.pth "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_l14_grit1m_fultune_8xe.pth"
 wget -O clip_l14_336_grit1m_fultune_8xe.pth "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_l14_336_grit1m_fultune_8xe.pth"
@@ -66,7 +64,7 @@ wget -O clip_l14_336_grit20m_fultune_2xe.pth "https://download.openxlab.org.cn/m
 # Alternative: Use curl if wget not available
 # curl -L -o clip_b16_grit1m_fultune_8xe.pth "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_b16_grit1m_fultune_8xe.pth"
 
-cd ../..
+cd ..
 ```
 
 **Total AlphaCLIP size**: ~2.5GB
@@ -76,11 +74,9 @@ cd ../..
 YOLOv8 models are automatically downloaded on first use, but you can pre-download them:
 
 ```bash
-# Create models directory
-mkdir -p models
-
-# Download all YOLOv8 variants
-cd models
+# Ensure unified Model directory
+mkdir -p Model
+cd Model
 
 # Detection models
 wget -O yolov8n.pt "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt"      # ~6MB
@@ -105,7 +101,7 @@ cd ..
 SAM2 models are automatically downloaded, but you can pre-download them:
 
 ```bash
-cd models
+cd Model
 
 # Download all SAM2 variants
 wget -O sam2_t.pt "https://github.com/ultralytics/assets/releases/download/v8.1.0/sam2_t.pt"      # ~39MB
@@ -380,13 +376,13 @@ If you're getting "SHA256 checksum does not match" error right now:
 ```bash
 # 1. Clear corrupted downloads
 rm -rf ~/.cache/clip/*
-rm -rf AlphaCLIP/checkpoints/*
+rm -rf Model/*
 
 # 2. Download with curl (more reliable)
-mkdir -p AlphaCLIP/checkpoints
-cd AlphaCLIP/checkpoints
+mkdir -p Model
+cd Model
 curl -L -o clip_b16_grit1m_fultune_8xe.pth "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_b16_grit1m_fultune_8xe.pth"
-cd ../..
+cd ..
 
 # 3. Test if it works
 python run_example.py
@@ -430,10 +426,10 @@ If you encounter "SHA256 checksum does not match" errors:
 ```bash
 # Clear corrupted downloads
 rm -rf ~/.cache/clip/*
-rm -rf AlphaCLIP/checkpoints/*
+rm -rf Model/*
 
 # Alternative 1: Use direct download with curl (more reliable)
-cd AlphaCLIP/checkpoints
+cd Model
 curl -L -o clip_b16_grit1m_fultune_8xe.pth "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_b16_grit1m_fultune_8xe.pth"
 curl -L -o clip_l14_grit1m_fultune_8xe.pth "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_l14_grit1m_fultune_8xe.pth"
 
@@ -445,7 +441,7 @@ aria2c -x 16 -s 16 "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/wei
 # Visit: https://openxlab.org.cn/models/detail/SunzeY/AlphaCLIP
 # Download manually and place in AlphaCLIP/checkpoints/
 
-cd ../..
+cd ..
 
 # Verify file integrity
 ls -la AlphaCLIP/checkpoints/

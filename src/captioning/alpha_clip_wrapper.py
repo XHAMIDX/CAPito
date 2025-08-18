@@ -72,6 +72,18 @@ class AlphaCLIPWrapper:
                 self.logger.error(f"Failed to import ModelPathsConfig: {e}")
                 pass
             
+            # Validate checkpoint file is loadable; otherwise, drop it
+            if checkpoint_path is not None and not self._validate_checkpoint_file(checkpoint_path):
+                self.logger.warning(
+                    f"AlphaCLIP checkpoint appears corrupted or unreadable: {checkpoint_path}. "
+                    f"Falling back to base CLIP weights."
+                )
+                try:
+                    os.remove(checkpoint_path)
+                except OSError:
+                    pass
+                checkpoint_path = None
+
             # Load model
             # AlphaCLIP's load() expects string "None" when no ckpt provided
             alpha_ckpt_arg = checkpoint_path if checkpoint_path is not None else "None"
@@ -141,6 +153,21 @@ class AlphaCLIPWrapper:
                 f"Could not download AlphaCLIP checkpoint automatically: {download_err}. "
                 f"Continuing without a visual checkpoint."
             )
+
+    def _validate_checkpoint_file(self, checkpoint_path: str) -> bool:
+        """Try to load the checkpoint with torch to detect corruption.
+
+        Returns True if loadable, False otherwise.
+        """
+        try:
+            if not os.path.exists(checkpoint_path):
+                return False
+            # Quick load check on CPU
+            _ = torch.load(checkpoint_path, map_location="cpu")
+            return True
+        except Exception as e:
+            self.logger.warning(f"Checkpoint validation failed for {checkpoint_path}: {e}")
+            return False
     
     def encode_image_with_mask(
         self,
@@ -259,6 +286,10 @@ class AlphaCLIPWrapper:
             # More complex case: handle different shapes
             image_embeds = image_embeds.unsqueeze(-1)
             similarity = torch.matmul(text_embeds, image_embeds).squeeze(-1)
+        
+        # Apply temperature scaling
+        temperature = 0.07
+        similarity = similarity / temperature
         
         raw_scores = similarity.clone()
         

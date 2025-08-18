@@ -97,14 +97,8 @@ class ModelManager:
             raise ValueError(f"Unknown model: {model_name}")
         
         # Determine destination path
-        if model_name.startswith("yolo"):
-            dest_path = Path(self.model_paths.yolo_models) / model_name
-        elif model_name.startswith("sam"):
-            dest_path = Path(self.model_paths.sam_models) / model_name
-        elif model_name.startswith("clip"):
-            dest_path = Path(self.model_paths.alpha_clip_checkpoints) / model_name
-        else:
-            dest_path = Path(self.model_paths.models_root) / model_name
+        # All models go to the unified Model directory
+        dest_path = Path(self.model_paths.models_root) / model_name
         
         # Check if already exists
         if dest_path.exists() and not force:
@@ -161,16 +155,8 @@ class ModelManager:
         Returns:
             Full path to the model file
         """
-        # Check if model exists in organized structure
-        if model_name.startswith("yolo"):
-            path = Path(self.model_paths.yolo_models) / model_name
-        elif model_name.startswith("sam"):
-            path = Path(self.model_paths.sam_models) / model_name
-        elif model_name.startswith("clip"):
-            path = Path(self.model_paths.alpha_clip_checkpoints) / model_name
-        else:
-            # For other models, check in root models directory
-            path = Path(self.model_paths.models_root) / model_name
+        # All models are stored under the unified Model directory
+        path = Path(self.model_paths.models_root) / model_name
         
         if path.exists():
             return str(path)
@@ -184,34 +170,12 @@ class ModelManager:
         Returns:
             Dictionary mapping model categories to available models
         """
-        available = {
-            "AlphaCLIP": [],
-            "YOLO": [],
-            "SAM2": [],
-            "Legacy": [],
-            "Language": []
-        }
-        
-        # Check AlphaCLIP models
-        alpha_clip_path = Path(self.model_paths.alpha_clip_checkpoints)
-        if alpha_clip_path.exists():
-            available["AlphaCLIP"] = [f.name for f in alpha_clip_path.glob("*.pth")]
-        
-        # Check YOLO models
-        yolo_path = Path(self.model_paths.yolo_models)
-        if yolo_path.exists():
-            available["YOLO"] = [f.name for f in yolo_path.glob("*.pt")]
-        
-        # Check SAM2 models
-        sam_path = Path(self.model_paths.sam_models)
-        if sam_path.exists():
-            available["SAM2"] = [f.name for f in sam_path.glob("*.pt")]
-        
-        # Check legacy models
-        legacy_path = Path(self.model_paths.legacy_root)
-        if legacy_path.exists():
-            available["Legacy"] = [f.name for f in legacy_path.glob("*.pth")]
-        
+        # Scan unified Model directory for known extensions
+        available = {"All": []}
+        model_root = Path(self.model_paths.models_root)
+        if model_root.exists():
+            available["All"] = [f.name for f in model_root.glob("*.pt")]
+            available["All"] += [f.name for f in model_root.glob("*.pth")]
         return available
     
     def check_required_models(self) -> None:
@@ -229,7 +193,7 @@ class ModelManager:
             if not os.path.exists(path):
                 missing.append(model)
         if missing:
-            raise FileNotFoundError(f"Missing required models: {missing}. Please run 'python setup.py download_models' to download them.")
+            raise FileNotFoundError(f"Missing required models: {missing}. Run: python migrate_models.py --download-all")
 
     def cleanup_old_structure(self) -> List[str]:
         """Clean up old model structure after migration.
@@ -264,15 +228,13 @@ def setup_model_environment() -> ModelManager:
     model_paths = ModelPathsConfig()
     manager = ModelManager(model_paths)
     
-    # Organize existing models
-    moved_files = manager.organize_existing_models()
+    # Attempt to download required models first (non-fatal if offline)
+    try:
+        manager.download_all_models(force=False)
+    except Exception as e:
+        logging.warning(f"Download attempt skipped/failed: {e}")
     
     # Check required models
     manager.check_required_models()
-    
-    # Log what was moved
-    for source, files in moved_files.items():
-        if files:
-            logging.info(f"Moved {len(files)} models from {source}")
     
     return manager

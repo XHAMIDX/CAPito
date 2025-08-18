@@ -4,25 +4,22 @@ This document explains the new centralized model organization structure designed
 
 ## Overview
 
-The GET_CAPTION project uses multiple AI models that were previously scattered across different directories. This new structure centralizes all models in a single `models/` directory with clear categorization.
+The GET_CAPTION project uses multiple AI models that were previously scattered across different directories. This new structure centralizes all models in a single `Model/` directory.
 
 ## Directory Structure
 
 ```
-models/
-├── alpha_clip/           # AlphaCLIP vision-language models
-│   └── checkpoints/      # AlphaCLIP checkpoint files (.pth)
-├── detection/            # Object detection and segmentation models
-│   ├── yolo/            # YOLOv8 detection models (.pt)
-│   └── sam/             # SAM2 segmentation models (.pt)
-├── language/             # Language models (BERT, RoBERTa)
-└── legacy/               # Legacy ConZIC models (.pth)
+Model/
+  clip_*.pth     # AlphaCLIP checkpoints
+  yolov8*.pt     # YOLOv8 detectors
+  sam2_*.pt      # SAM2 segmenters
+  ...            # Any future model files
 ```
 
 ## Model Categories
 
 ### 1. AlphaCLIP Models
-**Location**: `models/alpha_clip/checkpoints/`
+**Location**: `Model/`
 **File Format**: `.pth` (PyTorch checkpoints)
 **Models**:
 - `clip_b16_grit1m_fultune_8xe.pth` - ViT-B/16 base model
@@ -33,7 +30,7 @@ models/
 - `clip_l14_336_grit20m_fultune_2xe.pth` - ViT-L/14 336px 20M dataset
 
 ### 2. Detection Models
-**Location**: `models/detection/yolo/`
+**Location**: `Model/`
 **File Format**: `.pt` (PyTorch models)
 **Models**:
 - `yolov8n.pt` - YOLOv8 nano (~6MB)
@@ -43,7 +40,7 @@ models/
 - `yolov8x.pt` - YOLOv8 extra large (~136MB)
 
 ### 3. Segmentation Models
-**Location**: `models/detection/sam/`
+**Location**: `Model/`
 **File Format**: `.pt` (PyTorch models)
 **Models**:
 - `sam2_t.pt` - SAM2 tiny (~39MB)
@@ -52,7 +49,7 @@ models/
 - `sam2_l.pt` - SAM2 large (~224MB)
 
 ### 4. Language Models
-**Location**: `models/language/`
+**Location**: transformers cache (outside repo)
 **File Format**: Downloaded automatically by transformers library
 **Models**:
 - `bert-base-uncased` - BERT base model
@@ -61,7 +58,7 @@ models/
 - `roberta-large` - RoBERTa large model
 
 ### 5. Legacy Models
-**Location**: `models/legacy/`
+**Location**: `Model/` (if any)
 **File Format**: `.pth` (PyTorch checkpoints)
 **Models**: Any existing ConZIC or legacy model files
 
@@ -89,10 +86,7 @@ Check that models are in the correct locations:
 
 ```bash
 # Check directory structure
-ls -la models/
-ls -la models/alpha_clip/checkpoints/
-ls -la models/detection/yolo/
-ls -la models/detection/sam/
+ls -la Model/
 ```
 
 ### Step 3: Update Configuration
@@ -109,9 +103,7 @@ from src.config import Config
 config = Config()
 
 # Model paths are automatically managed
-print(config.model_paths.alpha_clip_checkpoints)  # models/alpha_clip/checkpoints/
-print(config.model_paths.yolo_models)            # models/detection/yolo/
-print(config.model_paths.sam_models)             # models/detection/sam/
+print(config.model_paths.models_root)            # Model/
 ```
 
 ## Benefits

@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 from typing import List, Dict, Tuple, Any
 import logging
+import os
 
 try:
     from ultralytics import YOLO
@@ -49,7 +50,17 @@ class ObjectDetector:
     def _load_model(self) -> None:
         """Load YOLO model."""
         try:
-            self.model = YOLO(self.model_name)
+            model_arg = self.model_name
+            # If a path under Model/ is provided but doesn't exist yet, fall back to basename for auto-download
+            if isinstance(model_arg, str) and not os.path.exists(model_arg):
+                try:
+                    self.model = YOLO(model_arg)
+                except Exception:
+                    # Fallback to triggering ultralytics auto-download with the base filename
+                    base_name = os.path.basename(model_arg)
+                    self.model = YOLO(base_name)
+            else:
+                self.model = YOLO(model_arg)
             self.model.to(self.device)
             self.logger.info(f"Loaded YOLO model: {self.model_name} on {self.device}")
         except Exception as e:

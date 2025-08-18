@@ -79,10 +79,10 @@ class CaptionPipeline:
             'prompt': 'A photo of',
             'max_length': 8,
             'num_iterations': 15,
-            'top_k': 50,
-            'temperature': 0.3,
-            'alpha': 0.8,
-            'beta': 1.5,
+            'top_k': 10,
+            'temperature': 0.1,
+            'alpha': 0.9,
+            'beta': 1.0,
             'generation_order': 'shuffle'
         }
         default_config.update(generation_config)

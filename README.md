@@ -63,11 +63,16 @@ pip install -e .
 
 ### Model Downloads
 
-The pipeline will automatically download required models on first use:
-- **YOLOv8**: Downloaded via ultralytics
-- **SAM2**: Downloaded via ultralytics
-- **AlphaCLIP**: Uses included checkpoints in `AlphaCLIP/`
-- **BERT/RoBERTa**: Downloaded via transformers
+All models are stored under a single `Model/` directory. The pipeline auto-downloads missing files on first use. You can also download upfront:
+
+```bash
+python migrate_models.py --download-all
+```
+
+- **AlphaCLIP** checkpoints: saved to `Model/clip_*.pth`
+- **YOLOv8**: saved to `Model/yolov8*.pt`
+- **SAM2**: saved to `Model/sam2_*.pt`
+- **BERT/RoBERTa**: cached by transformers (not inside repo)
 
 ## Quick Start
 
