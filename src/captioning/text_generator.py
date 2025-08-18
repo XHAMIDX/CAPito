@@ -97,7 +97,7 @@ class TextGenerator:
         except Exception as e:
             self.logger.warning(f"Could not mask stop words: {e}")
     
-    def _update_token_mask(self, max_len: int, current_pos: int) -> torch.Tensor:
+    def _update_token_mask(self, max_length: int, current_pos: int) -> torch.Tensor:
         """Update token mask based on position (allow period only at end)."""
         mask = self.token_mask.clone()
         
@@ -105,7 +105,7 @@ class TextGenerator:
         try:
             period_id = self.lm_tokenizer.convert_tokens_to_ids('.')
             if period_id is not None:
-                if current_pos == max_len - 1:
+                if current_pos == max_length - 1:
                     mask[0, period_id] = 1  # Allow period at end
                 else:
                     mask[0, period_id] = 0  # Disallow period elsewhere
@@ -141,155 +141,236 @@ class TextGenerator:
         num_iterations: int = 15,
         top_k: int = 50,
         temperature: float = 0.3,
-        alpha: float = 0.8,  # Weight for language model fluency
-        beta: float = 1.5,   # Weight for CLIP similarity
+        alpha: float = 0.8,
+        beta: float = 1.5,
         generation_order: str = "shuffle"
     ) -> Tuple[str, float]:
-        """Generate caption for masked image region.
+        """Generate caption using masked language modeling with CLIP guidance.
         
         Args:
             image: PIL Image
-            alpha_mask: Alpha mask tensor for the region
-            prompt: Initial prompt text
-            max_length: Maximum caption length (in tokens)
+            alpha_mask: Alpha mask tensor
+            prompt: Starting prompt
+            max_length: Maximum caption length
             num_iterations: Number of generation iterations
-            top_k: Number of top candidates to consider
-            temperature: Sampling temperature
-            alpha: Weight for language model score
-            beta: Weight for CLIP similarity score
-            generation_order: Order of token generation (sequential/shuffle/random)
+            top_k: Top-k candidates for each position
+            temperature: Temperature for sampling
+            alpha: Weight for language model scores
+            beta: Weight for CLIP scores
+            generation_order: Generation order strategy
             
         Returns:
-            Tuple of (best_caption, best_score)
+            Tuple of (caption, score)
         """
-        if self.clip_wrapper is None:
-            raise ValueError("CLIP wrapper not provided")
-        
-        # Initialize text with prompt + mask tokens
-        prompt_tokens = self.lm_tokenizer.encode(prompt, add_special_tokens=True)
-        total_length = len(prompt_tokens) + max_length
-        
-        # Create input with mask tokens
-        input_ids = prompt_tokens + [self.lm_tokenizer.mask_token_id] * max_length
-        input_ids = torch.tensor([input_ids], device=self.device)
-        
-        # Generation positions (excluding prompt)
-        generation_positions = list(range(len(prompt_tokens), total_length))
-        
-        best_caption = ""
-        best_score = -float('inf')
-        
-        for iteration in range(num_iterations):
-            self.logger.info(f"  Starting iteration {iteration + 1}/{num_iterations}")
-            # Determine generation order
-            if generation_order == "shuffle":
-                positions = generation_positions.copy()
-                random.shuffle(positions)
-            elif generation_order == "sequential":
-                positions = generation_positions
-            elif generation_order == "random":
-                positions = [random.choice(generation_positions)]
+        try:
+            if self.clip_wrapper is None:
+                raise ValueError("CLIP wrapper is required for caption generation")
+            
+            # Check if models are loaded
+            if self.lm_model is None or self.lm_tokenizer is None:
+                raise ValueError("Language model not properly loaded")
+            
+            self.logger.info(f"Starting caption generation with prompt: '{prompt}'")
+            self.logger.info(f"Parameters: max_length={max_length}, iterations={num_iterations}, top_k={top_k}")
+            
+            # Improved prompt templates for better captions
+            improved_prompts = [
+                "A photo of",
+                "This shows",
+                "The image contains",
+                "Visible in the image:",
+                "Depicted here:"
+            ]
+            
+            # Use a better prompt if available
+            if prompt in improved_prompts:
+                base_prompt = prompt
             else:
-                positions = generation_positions
+                base_prompt = "A photo of"
             
-            current_input = input_ids.clone()
+            # Add object context if available
+            if hasattr(alpha_mask, 'detection') and alpha_mask.detection:
+                obj_class = alpha_mask.detection.get('class_name', 'object')
+                base_prompt = f"A photo of a {obj_class}"
             
-            for pos_idx, pos in enumerate(positions):
-                self.logger.debug(f"    Processing position {pos_idx + 1}/{len(positions)} (token position {pos})")
-                # Update token mask for current position
-                pos_in_sequence = pos - len(prompt_tokens)
-                current_mask = self._update_token_mask(max_length, pos_in_sequence)
+            self.logger.info(f"Using base prompt: '{base_prompt}'")
+            
+            # Tokenize prompt
+            prompt_tokens = self.lm_tokenizer.encode(base_prompt, add_special_tokens=False)
+            max_length = max(len(prompt_tokens) + 1, max_length)  # Ensure minimum length
+            
+            self.logger.info(f"Prompt tokens: {prompt_tokens}, max_length: {max_length}")
+            
+            # Initialize best result
+            best_caption = base_prompt
+            best_score = 0.0
+            
+            # Generate multiple iterations
+            for iteration in range(num_iterations):
+                self.logger.info(f"Generation iteration {iteration + 1}/{num_iterations}")
                 
-                # Mask current position
-                current_input[0, pos] = self.lm_tokenizer.mask_token_id
-                
-                # Get language model predictions
-                with torch.no_grad():
-                    outputs = self.lm_model(current_input)
-                    logits = outputs.logits[0, pos]
-                
-                # Get top-k candidates
-                lm_probs, candidate_ids = self._get_top_k_candidates(
-                    logits, current_mask[0], top_k, temperature
+                # Initialize input sequence
+                current_input = torch.full(
+                    (1, max_length), 
+                    self.lm_tokenizer.pad_token_id, 
+                    dtype=torch.long, 
+                    device=self.device
                 )
+                current_input[0, :len(prompt_tokens)] = torch.tensor(prompt_tokens, device=self.device)
                 
-                # Create candidate sentences
-                candidate_texts = []
-                candidate_inputs = current_input.unsqueeze(1).repeat(1, top_k, 1)
-                candidate_inputs[0, :, pos] = candidate_ids[0]
+                # Determine generation order
+                if generation_order == "sequential":
+                    positions = list(range(len(prompt_tokens), max_length))
+                elif generation_order == "shuffle":
+                    positions = list(range(len(prompt_tokens), max_length))
+                    random.shuffle(positions)
+                elif generation_order == "span":
+                    # Generate from middle outward
+                    mid = (len(prompt_tokens) + max_length) // 2
+                    positions = [mid]
+                    left = mid - 1
+                    right = mid + 1
+                    while left >= len(prompt_tokens) or right < max_length:
+                        if left >= len(prompt_tokens):
+                            positions.append(right)
+                            right += 1
+                        elif right >= max_length:
+                            positions.append(left)
+                            left -= 1
+                        else:
+                            positions.append(left)
+                            positions.append(right)
+                            left -= 1
+                            right += 1
+                else:  # random
+                    positions = list(range(len(prompt_tokens), max_length))
+                    random.shuffle(positions)
                 
-                for i in range(top_k):
-                    candidate_input = candidate_inputs[0, i]
-                    candidate_text = self.lm_tokenizer.decode(
-                        candidate_input, skip_special_tokens=True
-                    )
-                    candidate_texts.append(candidate_text)
+                self.logger.info(f"Generation positions: {positions}")
                 
-                # Score candidates with CLIP
-                self.logger.debug(f"    Scoring {len(candidate_texts)} candidates with CLIP")
-                try:
-                    clip_scores, _ = self.clip_wrapper.score_text_candidates(
-                        image, alpha_mask, candidate_texts
-                    )
-                except Exception as e:
-                    self.logger.error(f"Error during CLIP scoring: {e}")
-                    # Use zero scores as fallback
-                    clip_scores = torch.zeros(len(candidate_texts), device=self.device)
-                
-                # Combine scores
-                # Handle different tensor shapes
-                if lm_probs.dim() > 1:
-                    lm_probs_flat = lm_probs.flatten()
-                else:
-                    lm_probs_flat = lm_probs
+                # Generate tokens position by position
+                for pos in positions:
+                    if pos >= max_length:
+                        break
+                        
+                    self.logger.debug(f"Processing position {pos}")
                     
-                if clip_scores.dim() > 1:
-                    clip_scores_flat = clip_scores.flatten()
-                else:
-                    clip_scores_flat = clip_scores
+                    # Update token mask for current position
+                    current_mask = self._update_token_mask(max_length, pos - len(prompt_tokens))
+                    
+                    # Mask current position
+                    current_input[0, pos] = self.lm_tokenizer.mask_token_id
+                    
+                    # Get language model predictions
+                    with torch.no_grad():
+                        outputs = self.lm_model(current_input)
+                        logits = outputs.logits[0, pos]
+                    
+                    # Get top-k candidates with better filtering
+                    lm_probs, candidate_ids = self._get_top_k_candidates(
+                        logits, current_mask[0], top_k, temperature
+                    )
+                    
+                    # Create candidate sentences
+                    candidate_texts = []
+                    candidate_inputs = current_input.unsqueeze(1).repeat(1, top_k, 1)
+                    candidate_inputs[0, :, pos] = candidate_ids[0]
+                    
+                    for i in range(top_k):
+                        candidate_input = candidate_inputs[0, i]
+                        candidate_text = self.lm_tokenizer.decode(
+                            candidate_input, skip_special_tokens=True
+                        )
+                        candidate_texts.append(candidate_text)
+                    
+                    # Score candidates with CLIP
+                    self.logger.debug(f"    Scoring {len(candidate_texts)} candidates with CLIP")
+                    try:
+                        clip_scores, _ = self.clip_wrapper.score_text_candidates(
+                            image, alpha_mask, candidate_texts
+                        )
+                    except Exception as e:
+                        self.logger.error(f"Error during CLIP scoring: {e}")
+                        # Use zero scores as fallback
+                        clip_scores = torch.zeros(len(candidate_texts), device=self.device)
+                    
+                    # Combine scores with better weighting
+                    # Normalize both scores to [0, 1] range
+                    if lm_probs.dim() > 1:
+                        lm_probs_flat = lm_probs.flatten()
+                    else:
+                        lm_probs_flat = lm_probs
+                        
+                    if clip_scores.dim() > 1:
+                        clip_scores_flat = clip_scores.flatten()
+                    else:
+                        clip_scores_flat = clip_scores
+                    
+                    # Normalize LM scores
+                    lm_min, lm_max = lm_probs_flat.min(), lm_probs_flat.max()
+                    if lm_max > lm_min:
+                        lm_probs_norm = (lm_probs_flat - lm_min) / (lm_max - lm_min)
+                    else:
+                        lm_probs_norm = torch.zeros_like(lm_probs_flat)
+                    
+                    # Normalize CLIP scores
+                    clip_min, clip_max = clip_scores_flat.min(), clip_scores_flat.max()
+                    if clip_max > clip_min:
+                        clip_scores_norm = (clip_scores_flat - clip_min) / (clip_max - clip_min)
+                    else:
+                        clip_scores_norm = torch.zeros_like(clip_scores_flat)
+                    
+                    # Combine with better balance - give more weight to CLIP for image relevance
+                    final_scores = (alpha * lm_probs_norm + beta * clip_scores_norm) / (alpha + beta)
+                    
+                    # Select best candidate
+                    best_idx = final_scores.argmax()
+                    if candidate_ids.dim() > 1:
+                        current_input[0, pos] = candidate_ids.flatten()[best_idx]
+                    else:
+                        current_input[0, pos] = candidate_ids[best_idx]
                 
-                final_scores = alpha * lm_probs_flat + beta * clip_scores_flat
-                
-                # Select best candidate
-                best_idx = final_scores.argmax()
-                if candidate_ids.dim() > 1:
-                    current_input[0, pos] = candidate_ids.flatten()[best_idx]
-                else:
-                    current_input[0, pos] = candidate_ids[best_idx]
-            
-            # Decode current iteration result
-            current_text = self.lm_tokenizer.decode(
-                current_input[0], skip_special_tokens=True
-            )
-            
-            # Score complete caption
-            try:
-                complete_scores, _ = self.clip_wrapper.score_text_candidates(
-                    image, alpha_mask, [current_text]
+                # Decode current iteration result
+                current_text = self.lm_tokenizer.decode(
+                    current_input[0], skip_special_tokens=True
                 )
-                # Handle tensor dimensions safely
-                if complete_scores.dim() > 0:
-                    current_score = complete_scores.flatten()[0].item()
-                else:
-                    current_score = complete_scores.item()
-            except Exception as e:
-                self.logger.error(f"Error during final CLIP scoring: {e}")
-                current_score = 0.0
+                
+                # Score complete caption
+                try:
+                    complete_scores, _ = self.clip_wrapper.score_text_candidates(
+                        image, alpha_mask, [current_text]
+                    )
+                    # Handle tensor dimensions safely
+                    if complete_scores.dim() > 0:
+                        current_score = complete_scores.flatten()[0].item()
+                    else:
+                        current_score = complete_scores.item()
+                except Exception as e:
+                    self.logger.error(f"Error during final CLIP scoring: {e}")
+                    current_score = 0.0
+                
+                # Update best if better
+                if current_score > best_score:
+                    best_score = current_score
+                    best_caption = current_text
+                
+                self.logger.info(
+                    f"Iteration {iteration + 1}/{num_iterations}: "
+                    f"Score {current_score:.3f}, Text: {current_text}"
+                )
             
-            # Update best if better
-            if current_score > best_score:
-                best_score = current_score
-                best_caption = current_text
+            # Clean up caption
+            best_caption = self._clean_caption(best_caption, base_prompt)
             
-            self.logger.debug(
-                f"Iteration {iteration + 1}/{num_iterations}: "
-                f"Score {current_score:.3f}, Text: {current_text}"
-            )
-        
-        # Clean up caption
-        best_caption = self._clean_caption(best_caption, prompt)
-        
-        return best_caption, best_score
+            self.logger.info(f"Caption generation completed. Best: '{best_caption}' (score: {best_score:.3f})")
+            
+            return best_caption, best_score
+            
+        except Exception as e:
+            self.logger.error(f"Caption generation failed: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
     
     def _clean_caption(self, caption: str, prompt: str) -> str:
         """Clean generated caption."""
@@ -297,14 +378,44 @@ class TextGenerator:
         if caption.startswith(prompt):
             caption = caption[len(prompt):].strip()
         
-        # Basic cleaning
-        caption = caption.strip()
-        if not caption.endswith('.'):
-            caption += '.'
+        # Remove generic phrases that make captions repetitive
+        generic_phrases = [
+            "a detailed image showing",
+            "a detailed image of",
+            "the image shows",
+            "this image contains",
+            "visible in this image",
+            "depicted in this image",
+            "this shows",
+            "this contains",
+            "this image shows",
+            "this image contains",
+            "the image contains",
+            "the image shows",
+            "a photo showing",
+            "a photo of",
+            "this photo shows",
+            "this photo contains"
+        ]
+        
+        for phrase in generic_phrases:
+            if caption.lower().startswith(phrase.lower()):
+                caption = caption[len(phrase):].strip()
+                break
+        
+        # Remove quotes and extra punctuation
+        caption = caption.strip('"\'.,;:!?')
         
         # Capitalize first letter
         if caption:
             caption = caption[0].upper() + caption[1:]
+        
+        # Remove trailing punctuation
+        caption = caption.rstrip('.,;:!?')
+        
+        # Ensure caption is not too short
+        if len(caption.split()) < 2:
+            caption = "An object"
         
         return caption
     

@@ -83,23 +83,23 @@ class ModelConfig:
 class GenerationConfig:
     """Text generation configuration."""
     # Generation parameters
-    sentence_len: int = 8
-    candidate_k: int = 50
-    num_iterations: int = 15
+    sentence_len: int = 6  # Reduced from 8 for more concise captions
+    candidate_k: int = 30  # Reduced from 50 for better quality
+    num_iterations: int = 10  # Reduced from 15 for faster generation
     
-    # Scoring weights
-    alpha: float = 0.8  # weight for fluency (BERT quality)
-    beta: float = 1.5   # weight for image-matching degree (CLIP)
+    # Scoring weights - better balance for image relevance
+    alpha: float = 0.4  # Reduced weight for fluency (BERT quality) from 0.8
+    beta: float = 2.0   # Increased weight for image-matching degree (CLIP) from 1.5
     gamma: float = 0.3  # weight for controllable degree (sentiment/POS)
     
     # Temperature and sampling
-    lm_temperature: float = 0.3
+    lm_temperature: float = 0.2  # Reduced from 0.3 for more focused generation
     
     # Generation order
-    order: str = "shuffle"  # sequential, shuffle, span, random
+    order: str = "span"  # Changed from "shuffle" to "span" for better coherence
     
-    # Prompt settings
-    prompt: str = "A detailed image showing "
+    # Prompt template
+    prompt: str = "A photo of"  # Simple, clean prompt
     
     # Control settings
     run_type: str = "caption"  # caption, controllable

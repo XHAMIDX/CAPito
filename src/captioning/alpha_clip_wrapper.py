@@ -103,36 +103,59 @@ class AlphaCLIPWrapper:
         Returns:
             Image embedding tensor
         """
-        # Ensure image is RGB
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-        
-        # Preprocess image
-        image_tensor = self.preprocess(image).unsqueeze(0)
-        image_tensor = image_tensor.to(self.device)
-        
-        # Ensure alpha mask has correct dimensions
-        if alpha_mask.dim() == 2:
-            alpha_mask = alpha_mask.unsqueeze(0)  # Add batch dimension
-        
-        # Resize alpha mask to match image tensor spatial dimensions
-        _, _, h, w = image_tensor.shape
-        if alpha_mask.shape[-2:] != (h, w):
-            alpha_mask = torch.nn.functional.interpolate(
-                alpha_mask.unsqueeze(0),  # Add channel dimension
-                size=(h, w),
-                mode='bilinear',
-                align_corners=False
-            ).squeeze(0)  # Remove channel dimension
-        
-        # Ensure alpha mask is on correct device
-        alpha_mask = alpha_mask.to(self.device)
-        
-        # Encode image with alpha mask
-        with torch.no_grad():
-            image_embeds = self.model.encode_image(image_tensor, alpha_mask)
-        
-        return image_embeds
+        try:
+            # Ensure image is RGB
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            self.logger.info(f"Preprocessing image...")
+            # Preprocess image
+            image_tensor = self.preprocess(image).unsqueeze(0)
+            image_tensor = image_tensor.to(self.device)
+            self.logger.info(f"Image tensor shape: {image_tensor.shape}")
+            
+            # Ensure alpha mask has correct dimensions
+            if alpha_mask.dim() == 2:
+                alpha_mask = alpha_mask.unsqueeze(0)  # Add batch dimension
+            
+            self.logger.info(f"Alpha mask shape after dimension fix: {alpha_mask.shape}")
+            
+            # Get the target size from the preprocessed image tensor
+            _, _, target_h, target_w = image_tensor.shape
+            
+            # Resize alpha mask to match image tensor spatial dimensions
+            current_h, current_w = alpha_mask.shape[-2:]
+            
+            self.logger.info(f"Target size: ({target_h}, {target_w}), Current size: ({current_h}, {current_w})")
+            
+            if alpha_mask.shape[-2:] != (target_h, target_w):
+                self.logger.info("Resizing alpha mask to match image tensor")
+                alpha_mask = torch.nn.functional.interpolate(
+                    alpha_mask.unsqueeze(0),  # Add channel dimension
+                    size=(target_h, target_w),
+                    mode='bilinear',
+                    align_corners=False
+                ).squeeze(0)  # Remove channel dimension
+            else:
+                self.logger.info("Mask already matches target size")
+            
+            # Ensure alpha mask is on correct device
+            alpha_mask = alpha_mask.to(self.device)
+            self.logger.info(f"Final alpha mask shape: {alpha_mask.shape}, device: {alpha_mask.device}")
+            
+            # Encode image with alpha mask
+            self.logger.info("Running AlphaCLIP model inference...")
+            with torch.no_grad():
+                image_embeds = self.model.encode_image(image_tensor, alpha_mask)
+            
+            self.logger.info(f"Image encoding successful, shape: {image_embeds.shape}")
+            return image_embeds
+            
+        except Exception as e:
+            self.logger.error(f"Error in encode_image_with_mask: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
     
     def encode_text(self, text_list: List[str]) -> torch.Tensor:
         """Encode text using AlphaCLIP.
@@ -216,24 +239,41 @@ class AlphaCLIPWrapper:
             Tuple of (normalized_scores, raw_scores)
         """
         start_time = time.time()
-        self.logger.debug(f"Scoring {len(text_candidates)} text candidates with AlphaCLIP")
+        self.logger.info(f"Scoring {len(text_candidates)} text candidates with AlphaCLIP")
         
         try:
+            # Check if model is loaded
+            if self.model is None or self.preprocess is None:
+                raise ValueError("AlphaCLIP model not properly loaded")
+            
+            self.logger.info(f"Model loaded: {self.model_name}, device: {self.device}")
+            self.logger.info(f"Image size: {image.size}, mode: {image.mode}")
+            self.logger.info(f"Alpha mask shape: {alpha_mask.shape}, device: {alpha_mask.device}")
+            
             # Encode image with mask
+            self.logger.info("Encoding image with mask...")
             image_embeds = self.encode_image_with_mask(image, alpha_mask)
+            self.logger.info(f"Image encoding shape: {image_embeds.shape}")
             
             # Encode text candidates
+            self.logger.info("Encoding text candidates...")
             text_embeds = self.encode_text(text_candidates)
+            self.logger.info(f"Text encoding shape: {text_embeds.shape}")
             
             # Compute similarity
+            self.logger.info("Computing similarity...")
             result = self.compute_similarity(image_embeds, text_embeds)
+            self.logger.info(f"Similarity result shapes: {[r.shape for r in result]}")
             
             elapsed_time = time.time() - start_time
-            self.logger.debug(f"AlphaCLIP scoring completed in {elapsed_time:.2f} seconds")
+            self.logger.info(f"AlphaCLIP scoring completed in {elapsed_time:.2f} seconds")
             
             return result
+            
         except Exception as e:
             self.logger.error(f"Error during AlphaCLIP scoring: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             # Return zero scores as fallback
             num_candidates = len(text_candidates)
             zero_scores = torch.zeros(num_candidates, device=self.device)

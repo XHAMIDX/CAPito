@@ -128,6 +128,10 @@ class GetCaptionPipeline:
             f"Starting caption generation for {len(alpha_masks)} objects "
             f"with {self.config.processing.samples_num} samples per object"
         )
+        
+        # Log generation parameters for debugging
+        self.logger.info(f"Generation config: {generation_config}")
+        
         caption_results = self.caption_pipeline.process_image_complete(
             image=image,
             detection_results=alpha_masks,

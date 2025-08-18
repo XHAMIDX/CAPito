@@ -140,7 +140,7 @@ class DetectionPipeline:
     def prepare_alpha_masks_for_clip(
         self,
         alpha_masks: List[Dict[str, Any]],
-        target_size: Tuple[int, int] = (224, 224)
+        target_size: Tuple[int, int] = (224, 224)  # Revert to safe default
     ) -> List[Dict[str, Any]]:
         """Prepare alpha masks for AlphaCLIP inference.
         
@@ -157,7 +157,7 @@ class DetectionPipeline:
             alpha_mask = mask_info['alpha_mask']
             detection = mask_info['detection']
             
-            # Convert to torch tensor
+            # Convert to torch tensor with safe resizing
             alpha_tensor = numpy_to_torch_alpha(
                 alpha_mask=alpha_mask,
                 target_size=target_size,
@@ -169,7 +169,8 @@ class DetectionPipeline:
                 'detection': detection,
                 'class_name': detection['class_name'],
                 'confidence': detection['confidence'],
-                'bbox': detection['bbox']
+                'bbox': detection['bbox'],
+                'original_mask_size': alpha_mask.shape  # Store original size for reference
             })
         
         return prepared_masks
