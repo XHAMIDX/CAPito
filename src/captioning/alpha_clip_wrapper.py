@@ -8,6 +8,8 @@ from PIL import Image
 from typing import List, Union, Tuple, Optional
 import logging
 import time
+import urllib.request
+from urllib.error import URLError, HTTPError
 
 # Add AlphaCLIP to path
 alpha_clip_path = os.path.join(os.path.dirname(__file__), '..', '..', 'AlphaCLIP')
@@ -52,7 +54,7 @@ class AlphaCLIPWrapper:
                 self.model_name = "ViT-B/32"
             
             # Try to get checkpoint path from config if available
-            checkpoint_path = None
+            checkpoint_path: Optional[str] = None
             try:
                 # Add project root to path for absolute import
                 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -62,15 +64,20 @@ class AlphaCLIPWrapper:
                 model_paths = ModelPathsConfig()
                 checkpoint_path = model_paths.get_alpha_clip_path(self.model_name)
                 if not os.path.exists(checkpoint_path):
-                    checkpoint_path = None
+                    # Attempt auto-download for known models
+                    self._ensure_checkpoint_available(self.model_name, checkpoint_path)
+                    if not os.path.exists(checkpoint_path):
+                        checkpoint_path = None
             except ImportError as e:
                 self.logger.error(f"Failed to import ModelPathsConfig: {e}")
                 pass
             
             # Load model
+            # AlphaCLIP's load() expects string "None" when no ckpt provided
+            alpha_ckpt_arg = checkpoint_path if checkpoint_path is not None else "None"
             self.model, self.preprocess = load(
                 self.model_name, 
-                alpha_vision_ckpt_pth=checkpoint_path,
+                alpha_vision_ckpt_pth=alpha_ckpt_arg,
                 device=self.device
             )
             self.model.eval()
@@ -88,6 +95,52 @@ class AlphaCLIPWrapper:
         except Exception as e:
             self.logger.error(f"Failed to load AlphaCLIP model: {e}")
             raise
+
+    def _get_checkpoint_url(self, model_name: str) -> Optional[str]:
+        """Return a download URL for a known AlphaCLIP checkpoint, if available."""
+        # Source: AlphaCLIP model-zoo
+        url_mapping = {
+            # GRIT-1M finetuned weights
+            "ViT-B/16": "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_b16_grit1m_fultune_8xe.pth",
+            "ViT-L/14": "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_l14_grit1m_fultune_8xe.pth",
+            "ViT-L/14@336px": "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_l14_336_grit1m_fultune_8xe.pth",
+            # Some variants below may not be available; return None if unknown
+            # "ViT-B/32": "",  # Not provided in official model-zoo
+            # "RN50": "",
+        }
+        return url_mapping.get(model_name)
+
+    def _ensure_checkpoint_available(self, model_name: str, destination_path: str) -> None:
+        """Download the AlphaCLIP checkpoint to destination_path if the file does not exist."""
+        try:
+            if os.path.exists(destination_path):
+                return
+            os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+            url = self._get_checkpoint_url(model_name)
+            if not url:
+                self.logger.warning(
+                    f"No known download URL for AlphaCLIP checkpoint of {model_name}. "
+                    f"Proceeding without a visual checkpoint."
+                )
+                return
+            self.logger.info(f"Downloading AlphaCLIP checkpoint for {model_name}...")
+            self.logger.info(f"From: {url}")
+            self.logger.info(f"To:   {destination_path}")
+            urllib.request.urlretrieve(url, destination_path)
+            # Basic sanity check on file size (> 1 MB)
+            file_size = os.path.getsize(destination_path) if os.path.exists(destination_path) else 0
+            if file_size < 1 * 1024 * 1024:
+                try:
+                    os.remove(destination_path)
+                except OSError:
+                    pass
+                raise RuntimeError("Downloaded checkpoint is too small; download may have failed.")
+            self.logger.info("AlphaCLIP checkpoint downloaded successfully.")
+        except (URLError, HTTPError, RuntimeError, Exception) as download_err:
+            self.logger.warning(
+                f"Could not download AlphaCLIP checkpoint automatically: {download_err}. "
+                f"Continuing without a visual checkpoint."
+            )
     
     def encode_image_with_mask(
         self,
