@@ -3,18 +3,20 @@
 import sys
 from pathlib import Path
 
-# Add src to path
-sys.path.append("src")
 
-from main_pipeline import GetCaptionPipeline
+sys.path.append(".")
+
+from src.main_pipeline import GetCaptionPipeline
 from src.config import Config
 
 def main():
     # Setup configuration
     config = Config()
-    config.model.device = "cuda"  # Change to "cuda" if you have GPU
+    config.model.device = "cpu"  # Change to "cuda" if you have GPU
     config.processing.samples_num = 1  # One caption per object
-    config.generation.num_iterations = 10  # Faster generation
+    config.generation.num_iterations = 5  # Faster generation (default: 15)
+    config.generation.candidate_k = 20  # Fewer candidates (default: 50)
+    config.generation.sentence_len = 10  # Shorter sentences (default: 8)
     
     # Initialize pipeline
     print("🚀 Initializing GET_CAPTION pipeline...")
@@ -33,24 +35,24 @@ def main():
     
     # Print results
     print("\n" + "="*60)
-    print("🎯 RESULTS")
+    print(" RESULTS")
     print("="*60)
     
-    print(f"⏱️  Processing time: {results['processing_time']:.2f}s")
+    print(f" Processing time: {results['processing_time']:.2f}s")
     
     # Detection summary
     detection_summary = results['caption_results']['summary']
-    print(f"🔍 Objects detected: {detection_summary['total_objects_detected']}")
-    print(f"✅ Successful captions: {detection_summary['successful_captions']}")
+    print(f" Objects detected: {detection_summary['total_objects_detected']}")
+    print(f" Successful captions: {detection_summary['successful_captions']}")
     
     # Full image caption
     if results['caption_results']['full_image_caption']:
         full_cap = results['caption_results']['full_image_caption']
         if full_cap.get('success'):
-            print(f"\n🖼️  Full image: {full_cap['caption']}")
+            print(f"\n Full image: {full_cap['caption']}")
     
     # Object captions
-    print(f"\n🎯 Object captions:")
+    print(f"\n Object captions:")
     for i, obj_result in enumerate(results['caption_results']['object_captions']):
         if obj_result.get('success'):
             obj_info = obj_result['object_info']
@@ -59,12 +61,12 @@ def main():
             caption = obj_result['caption']
             print(f"   {i+1}. {class_name} ({confidence:.2f}): {caption}")
         else:
-            print(f"   {i+1}. ❌ Failed: {obj_result.get('error', 'Unknown error')}")
+            print(f"   {i+1}. Failed: {obj_result.get('error', 'Unknown error')}")
     
-    print(f"\n💾 Results saved to: results/")
+    print(f"\n Results saved to: results/")
     print("   - Check the JSON files for detailed results")
     print("   - Check the visualization images")
-    print("\n✨ Done!")
+    print("\n Done!")
 
 if __name__ == "__main__":
     main()

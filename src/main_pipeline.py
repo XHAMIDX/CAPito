@@ -20,11 +20,14 @@ except ImportError:
     # Fall back to absolute imports (when run directly)
     import sys
     import os
-    sys.path.append(os.path.dirname(__file__))
-    from config import Config, load_config
-    from utils import setup_logging, load_image, save_image, create_summary_report
-    from detection import DetectionPipeline
-    from captioning import CaptionPipeline
+    # Add the parent directory to sys.path to make imports work
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    from src.config import Config, load_config
+    from src.utils import setup_logging, load_image, save_image, create_summary_report
+    from src.detection import DetectionPipeline
+    from src.captioning import CaptionPipeline
 
 
 class GetCaptionPipeline:
@@ -121,6 +124,10 @@ class GetCaptionPipeline:
             'generation_order': self.config.generation.order
         }
         
+        self.logger.info(
+            f"Starting caption generation for {len(alpha_masks)} objects "
+            f"with {self.config.processing.samples_num} samples per object"
+        )
         caption_results = self.caption_pipeline.process_image_complete(
             image=image,
             detection_results=alpha_masks,
@@ -128,6 +135,7 @@ class GetCaptionPipeline:
             include_full_image=True,
             num_samples_per_object=self.config.processing.samples_num
         )
+        self.logger.info("Caption generation completed")
         
         # Combine results
         complete_results = {

@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 from typing import List, Union, Tuple, Optional
 import logging
+import time
 
 # Add AlphaCLIP to path
 alpha_clip_path = os.path.join(os.path.dirname(__file__), '..', '..', 'AlphaCLIP')
@@ -214,14 +215,29 @@ class AlphaCLIPWrapper:
         Returns:
             Tuple of (normalized_scores, raw_scores)
         """
-        # Encode image with mask
-        image_embeds = self.encode_image_with_mask(image, alpha_mask)
+        start_time = time.time()
+        self.logger.debug(f"Scoring {len(text_candidates)} text candidates with AlphaCLIP")
         
-        # Encode text candidates
-        text_embeds = self.encode_text(text_candidates)
-        
-        # Compute similarity
-        return self.compute_similarity(image_embeds, text_embeds)
+        try:
+            # Encode image with mask
+            image_embeds = self.encode_image_with_mask(image, alpha_mask)
+            
+            # Encode text candidates
+            text_embeds = self.encode_text(text_candidates)
+            
+            # Compute similarity
+            result = self.compute_similarity(image_embeds, text_embeds)
+            
+            elapsed_time = time.time() - start_time
+            self.logger.debug(f"AlphaCLIP scoring completed in {elapsed_time:.2f} seconds")
+            
+            return result
+        except Exception as e:
+            self.logger.error(f"Error during AlphaCLIP scoring: {e}")
+            # Return zero scores as fallback
+            num_candidates = len(text_candidates)
+            zero_scores = torch.zeros(num_candidates, device=self.device)
+            return zero_scores, zero_scores.clone()
     
     def get_image_features(
         self,

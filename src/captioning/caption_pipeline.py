@@ -179,6 +179,7 @@ class CaptionPipeline:
             
             if num_samples_per_object == 1:
                 # Single caption
+                self.logger.info(f"  Generating single caption for object")
                 result = self.caption_object(
                     image=image,
                     alpha_mask=alpha_mask,
@@ -188,6 +189,7 @@ class CaptionPipeline:
                 results.append(result)
             else:
                 # Multiple caption samples
+                self.logger.info(f"  Generating {num_samples_per_object} caption samples for object")
                 samples = []
                 for sample_idx in range(num_samples_per_object):
                     self.logger.info(f"  Sample {sample_idx + 1}/{num_samples_per_object}")
@@ -202,7 +204,7 @@ class CaptionPipeline:
                 
                 # Keep the best sample
                 best_sample = max(
-                    samples, 
+                    samples,
                     key=lambda x: x.get('clip_score', 0.0) if x.get('success', False) else -1
                 )
                 best_sample['all_samples'] = samples

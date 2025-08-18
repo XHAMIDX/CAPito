@@ -180,6 +180,7 @@ class TextGenerator:
         best_score = -float('inf')
         
         for iteration in range(num_iterations):
+            self.logger.info(f"  Starting iteration {iteration + 1}/{num_iterations}")
             # Determine generation order
             if generation_order == "shuffle":
                 positions = generation_positions.copy()
@@ -193,7 +194,8 @@ class TextGenerator:
             
             current_input = input_ids.clone()
             
-            for pos in positions:
+            for pos_idx, pos in enumerate(positions):
+                self.logger.debug(f"    Processing position {pos_idx + 1}/{len(positions)} (token position {pos})")
                 # Update token mask for current position
                 pos_in_sequence = pos - len(prompt_tokens)
                 current_mask = self._update_token_mask(max_length, pos_in_sequence)
@@ -224,9 +226,15 @@ class TextGenerator:
                     candidate_texts.append(candidate_text)
                 
                 # Score candidates with CLIP
-                clip_scores, _ = self.clip_wrapper.score_text_candidates(
-                    image, alpha_mask, candidate_texts
-                )
+                self.logger.debug(f"    Scoring {len(candidate_texts)} candidates with CLIP")
+                try:
+                    clip_scores, _ = self.clip_wrapper.score_text_candidates(
+                        image, alpha_mask, candidate_texts
+                    )
+                except Exception as e:
+                    self.logger.error(f"Error during CLIP scoring: {e}")
+                    # Use zero scores as fallback
+                    clip_scores = torch.zeros(len(candidate_texts), device=self.device)
                 
                 # Combine scores
                 # Handle different tensor shapes
@@ -255,14 +263,18 @@ class TextGenerator:
             )
             
             # Score complete caption
-            complete_scores, _ = self.clip_wrapper.score_text_candidates(
-                image, alpha_mask, [current_text]
-            )
-            # Handle tensor dimensions safely
-            if complete_scores.dim() > 0:
-                current_score = complete_scores.flatten()[0].item()
-            else:
-                current_score = complete_scores.item()
+            try:
+                complete_scores, _ = self.clip_wrapper.score_text_candidates(
+                    image, alpha_mask, [current_text]
+                )
+                # Handle tensor dimensions safely
+                if complete_scores.dim() > 0:
+                    current_score = complete_scores.flatten()[0].item()
+                else:
+                    current_score = complete_scores.item()
+            except Exception as e:
+                self.logger.error(f"Error during final CLIP scoring: {e}")
+                current_score = 0.0
             
             # Update best if better
             if current_score > best_score:
@@ -320,6 +332,7 @@ class TextGenerator:
             self.logger.info(f"Generating caption {i + 1}/{num_samples}")
             caption, score = self.generate_caption(image, alpha_mask, **kwargs)
             captions.append((caption, score))
+            self.logger.info(f"  Completed caption {i + 1}/{num_samples}: {caption} (score: {score:.3f})")
         
         # Sort by score (descending)
         captions.sort(key=lambda x: x[1], reverse=True)
