@@ -53,6 +53,13 @@ class ModelPaths:
         "roberta_large": "roberta-large"
     })
     
+    # Analysis models
+    analysis_models: Dict[str, str] = field(default_factory=lambda: {
+        "depth_dpt": "Intel/dpt-large",
+        "pose_yolo": "yolov8n-pose.pt",
+        "similarity": "all-MiniLM-L6-v2"
+    })
+    
     def __post_init__(self):
         """Ensure models directory exists."""
         os.makedirs(self.models_root, exist_ok=True)
@@ -63,7 +70,8 @@ class ModelPaths:
             "vlm": self.vlm_models,
             "detection": self.detection_models,
             "segmentation": self.segmentation_models,
-            "language": self.language_models
+            "language": self.language_models,
+            "analysis": self.analysis_models
         }
         
         if model_type not in model_maps:
@@ -75,7 +83,16 @@ class ModelPaths:
         
         # For Hugging Face models, return the model name directly
         if model_type == "language":
+            # Language models are always HuggingFace models
             return model_map[model_name]
+        elif model_type == "analysis":
+            # Check if it's a HuggingFace model (contains forward slash or known prefixes)
+            model_path = model_map[model_name]
+            if "/" in model_path or model_path.startswith(("Intel/", "microsoft/", "huggingface/")):
+                return model_path
+            else:
+                # Local analysis model file
+                return os.path.join(self.models_root, model_path)
         
         # For local models, return full path
         return os.path.join(self.models_root, model_map[model_name])
@@ -166,6 +183,51 @@ class CaptioningConfig:
 
 
 @dataclass
+class AnalysisConfig:
+    """Analysis Configuration for depth, pose, and tracking."""
+    
+    # Depth estimation
+    enable_depth: bool = True
+    depth_model: str = "depth_dpt"
+    
+    # Pose estimation
+    enable_pose: bool = True
+    pose_model: str = "pose_yolo"
+    pose_confidence_threshold: float = 0.3
+    
+    # Object tracking
+    enable_tracking: bool = True
+    tracking_max_disappeared: int = 10
+    tracking_max_distance: float = 0.3
+    
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+@dataclass
+class GraphConfig:
+    """Scene Graph Generation Configuration."""
+    
+    # Graph building
+    enable_graph: bool = True
+    similarity_threshold: float = 0.6
+    distance_threshold: float = 0.3
+    
+    # Similarity model
+    similarity_model: str = "all-MiniLM-L6-v2"
+    
+    # Visualization
+    save_graph_visualization: bool = True
+    show_node_labels: bool = True
+    node_size: int = 1000
+    font_size: int = 10
+    
+    # Export
+    export_formats: List[str] = field(default_factory=lambda: ["json", "gexf"])
+    
+    device: str = "cpu"  # Similarity models usually run better on CPU
+
+
+@dataclass
 class SystemConfig:
     """System-wide Configuration."""
     
@@ -193,6 +255,8 @@ class CapitoConfig:
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     segmentation: SegmentationConfig = field(default_factory=SegmentationConfig)
     captioning: CaptioningConfig = field(default_factory=CaptioningConfig)
+    analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
+    graph: GraphConfig = field(default_factory=GraphConfig)
     system: SystemConfig = field(default_factory=SystemConfig)
     
     def get_model_path(self, model_type: str, model_name: str) -> str:

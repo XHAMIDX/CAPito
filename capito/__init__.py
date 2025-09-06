@@ -2,22 +2,35 @@
 CAPito: Content-Aware Photo Image Text Optimizer
 ===============================================
 
-A high-level, modular system for object detection, segmentation, and 
-intelligent captioning using Vision-Language Models.
+Enhanced modular system for comprehensive scene understanding including:
+- Object detection and segmentation
+- Depth estimation and pose analysis
+- Individual object captioning
+- Scene graph generation
+- Relationship analysis
 
 Key Components:
 - VLM: AlphaCLIP-based vision-language understanding
 - Detection: YOLO-based object detection  
 - Segmentation: SAM2-based mask generation
 - Captioning: Controllable text generation with BERT/RoBERTa
+- Analysis: Depth estimation, pose detection, object tracking
+- Graph: Scene graph generation and relationship analysis
 
 Usage:
     from capito import CAPito, get_default_config
     
     config = get_default_config()
+    config.graph.enable_graph = True  # Enable scene graph generation
     capito = CAPito(config)
     
     results = capito.process_image("path/to/image.jpg")
+    
+    # Access enhanced results
+    objects = results["enhanced_objects"]
+    scene_graph = results["scene_graph"] 
+    graph_analysis = results["graph_analysis"]
+    scene_summary = results["scene_summary"]
 """
 
 from .core.config import (

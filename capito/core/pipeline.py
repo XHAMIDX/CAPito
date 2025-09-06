@@ -16,12 +16,18 @@ from typing import Dict, List, Optional, Union, Tuple, Any
 import torch
 from PIL import Image
 import numpy as np
+import networkx as nx
 
 from .config import CapitoConfig
 from ..vlm.alpha_clip import AlphaCLIPWrapper
 from ..detection.detector import ObjectDetector
 from ..detection.segmentation import SAM2Segmentator
 from ..captioning.generator import CaptionGenerator
+from ..analysis.depth_estimator import DepthEstimator
+from ..analysis.pose_estimator import PoseEstimator
+from ..analysis.tracker import ObjectTracker
+from ..graph.graph_builder import SceneGraphBuilder
+from ..graph.graph_analyzer import GraphAnalyzer
 from ..utils.logger import setup_logging
 from ..utils.image_utils import load_image, save_image
 from ..utils.model_manager import ModelManager
@@ -53,6 +59,8 @@ class CAPito:
         self._init_detection()
         self._init_segmentation()
         self._init_captioning()
+        self._init_analysis()
+        self._init_graph()
         
         self.logger.info("CAPito pipeline initialized successfully")
     
@@ -103,6 +111,53 @@ class CAPito:
             device=self.config.system.device
         )
     
+    def _init_analysis(self) -> None:
+        """Initialize analysis components (depth, pose, tracking)."""
+        self.logger.info("Loading analysis models...")
+        
+        # Initialize depth estimator
+        if self.config.analysis.enable_depth:
+            self.depth_estimator = DepthEstimator(device=self.config.analysis.device)
+        else:
+            self.depth_estimator = None
+        
+        # Initialize pose estimator
+        if self.config.analysis.enable_pose:
+            pose_model_path = self.config.get_model_path("analysis", self.config.analysis.pose_model)
+            self.pose_estimator = PoseEstimator(
+                model_path=pose_model_path,
+                device=self.config.analysis.device
+            )
+        else:
+            self.pose_estimator = None
+        
+        # Initialize object tracker
+        if self.config.analysis.enable_tracking:
+            self.tracker = ObjectTracker(
+                max_disappeared=self.config.analysis.tracking_max_disappeared,
+                max_distance=self.config.analysis.tracking_max_distance
+            )
+        else:
+            self.tracker = None
+    
+    def _init_graph(self) -> None:
+        """Initialize graph generation components."""
+        if not self.config.graph.enable_graph:
+            self.graph_builder = None
+            self.graph_analyzer = None
+            return
+        
+        self.logger.info("Loading graph generation models...")
+        
+        # Initialize graph builder
+        self.graph_builder = SceneGraphBuilder(
+            similarity_model=self.config.graph.similarity_model,
+            device=self.config.graph.device
+        )
+        
+        # Initialize graph analyzer
+        self.graph_analyzer = GraphAnalyzer()
+    
     def process_image(
         self, 
         image_path: Union[str, Path], 
@@ -146,16 +201,70 @@ class CAPito:
         self.logger.info("Generating segmentation masks...")
         masks = self.segmentator.segment(image, detections)
         
-        # Step 3: Caption Generation
+        # Step 3: Enhanced Analysis
+        self.logger.info("Running enhanced analysis...")
+        
+        # Depth estimation
+        depth_map = None
+        if self.depth_estimator:
+            depth_map = self.depth_estimator.estimate_depth(image)
+        
+        # Pose estimation for humans
+        human_poses = []
+        if self.pose_estimator:
+            human_poses = self.pose_estimator.estimate_poses(image)
+        
+        # Object tracking (convert detections to dict format for tracker)
+        tracked_objects = detections  # Will be enhanced for video
+        if self.tracker:
+            detection_dicts = [det.to_dict() for det in detections]
+            tracked_detection_dicts = self.tracker.update(detection_dicts)
+            # Convert back to Detection objects if needed
+            tracked_objects = detections  # Keep original for now
+        
+        # Step 4: Caption Generation with Enhanced Features
         self.logger.info("Generating captions...")
         captions = []
+        enhanced_objects = []
         
-        # Generate one caption per detected object
+        # Generate one caption per detected object with enhanced features
         for i, detection in enumerate(detections):
             try:
                 # Get corresponding mask if available
                 mask_obj = masks[i] if i < len(masks) else None
                 mask_data = mask_obj.mask if mask_obj else None
+                
+                # Normalize bounding box coordinates
+                bbox_normalized = self._normalize_bbox(detection.bbox, image.size)
+                area_normalized = self._normalize_area(detection.area, image.size)
+                
+                # Add depth information
+                depth_value = 0.5  # Default
+                if depth_map is not None and self.depth_estimator:
+                    depth_value = self.depth_estimator.get_object_depth(
+                        depth_map, 
+                        bbox_normalized,
+                        image.size
+                    )
+                
+                # Add pose information for humans
+                pose_data = None
+                if detection.class_name == 'person' and self.pose_estimator:
+                    pose_data = self.pose_estimator.get_pose_for_human(
+                        image, 
+                        list(bbox_normalized)
+                    )
+                
+                # Create enhanced object data
+                enhanced_object = {
+                    'bbox': bbox_normalized,
+                    'class_name': detection.class_name,
+                    'confidence': detection.confidence,
+                    'area': area_normalized,
+                    'depth': depth_value,
+                    'pose': pose_data,
+                    'track_id': getattr(detection, 'track_id', -1)
+                }
                 
                 # Generate caption for this specific object
                 object_caption = self.caption_generator.generate_for_object(
@@ -163,11 +272,47 @@ class CAPito:
                     detection=detection,
                     mask=mask_data
                 )
+                
+                enhanced_object['caption'] = object_caption
+                enhanced_objects.append(enhanced_object)
                 captions.append(object_caption)
                 
             except Exception as e:
-                self.logger.warning(f"Failed to generate caption for object {i+1}: {e}")
+                self.logger.warning(f"Failed to process object {i}: {e}")
+                # Add fallback object
+                bbox_normalized = self._normalize_bbox(detection.bbox, image.size)
+                area_normalized = self._normalize_area(detection.area, image.size)
+                
+                enhanced_objects.append({
+                    'bbox': bbox_normalized,
+                    'class_name': detection.class_name,
+                    'confidence': detection.confidence,
+                    'area': area_normalized,
+                    'depth': 0.5,
+                    'pose': None,
+                    'track_id': -1,
+                    'caption': f"A {detection.class_name}"
+                })
                 captions.append(f"A {detection.class_name}")
+        
+        # Step 5: Scene Graph Generation
+        scene_graph = None
+        graph_analysis = None
+        scene_summary = ""
+        
+        if self.graph_builder and enhanced_objects:
+            self.logger.info("Building scene graph...")
+            
+            scene_graph = self.graph_builder.build_graph(
+                enhanced_objects,
+                image.size,
+                self.config.graph.similarity_threshold,
+                self.config.graph.distance_threshold
+            )
+            
+            if self.graph_analyzer:
+                graph_analysis = self.graph_analyzer.analyze_graph(scene_graph)
+                scene_summary = self.graph_analyzer.generate_scene_summary(scene_graph)
         
         # If no objects detected, generate general scene caption
         if not captions:
@@ -187,10 +332,20 @@ class CAPito:
             "detections": detections,
             "masks": masks,
             "captions": captions,
+            "enhanced_objects": enhanced_objects,
+            "scene_graph": nx.node_link_data(scene_graph) if scene_graph is not None else None,
+            "graph_analysis": graph_analysis,
+            "scene_summary": scene_summary,
+            "depth_map": depth_map.tolist() if depth_map is not None else None,
+            "human_poses": human_poses,
             "metadata": {
                 "config": self._get_config_summary(),
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "image_size": image.size
+                "image_size": image.size,
+                "num_objects": len(enhanced_objects),
+                "has_graph": scene_graph is not None,
+                "has_depth": depth_map is not None,
+                "num_humans": len([obj for obj in enhanced_objects if obj['class_name'] == 'person'])
             }
         }
         
@@ -414,13 +569,32 @@ class CAPito:
         # For now, require reinitialization
         raise NotImplementedError("Configuration updates require reinitialization")
     
+    def _normalize_bbox(self, bbox: Tuple[float, float, float, float], image_size: Tuple[int, int]) -> List[float]:
+        """Normalize bounding box coordinates to [0, 1] range."""
+        width, height = image_size
+        x1, y1, x2, y2 = bbox
+        return [x1 / width, y1 / height, x2 / width, y2 / height]
+    
+    def _normalize_area(self, area: float, image_size: Tuple[int, int]) -> float:
+        """Normalize area to [0, 1] range based on image size."""
+        width, height = image_size
+        total_area = width * height
+        return area / total_area
+    
     def cleanup(self) -> None:
         """Clean up resources."""
         self.logger.info("Cleaning up CAPito pipeline...")
         
         # Clean up models if they have cleanup methods
-        for component in [self.vlm, self.detector, self.segmentator, self.caption_generator]:
-            if hasattr(component, 'cleanup'):
+        components = [
+            self.vlm, self.detector, self.segmentator, self.caption_generator,
+            getattr(self, 'depth_estimator', None),
+            getattr(self, 'pose_estimator', None),
+            getattr(self, 'graph_builder', None)
+        ]
+        
+        for component in components:
+            if component and hasattr(component, 'cleanup'):
                 component.cleanup()
         
         # Clear CUDA cache if using GPU

@@ -97,11 +97,18 @@ class CaptionGenerator:
             
             # Create mask tensor
             self.token_mask = torch.ones((1, self.lm_tokenizer.vocab_size), device=self.device)
+            
+            # Add unused tokens to stop_ids
+            unused_tokens = [f'[unused{i}]' for i in range(1000)]
+            stop_words.extend(unused_tokens)
+            
+            stop_ids = self.lm_tokenizer.convert_tokens_to_ids(stop_words)
+
             for stop_id in stop_ids:
                 if stop_id != self.lm_tokenizer.unk_token_id:  # Valid token
                     self.token_mask[0, stop_id] = 0
             
-            self.logger.info(f"Loaded {len(stop_words)} stop words")
+            self.logger.info(f"Loaded {len(stop_words)} stop words (including unused tokens)")
             
         except Exception as e:
             self.logger.warning(f"Failed to load stop words: {e}")
@@ -637,6 +644,20 @@ class CaptionGenerator:
         caption = re.sub(r'\s*\.\s*', '. ', caption)  # Fix period spacing
         caption = re.sub(r'\s+', ' ', caption)  # Remove redundant spaces
         caption = re.sub(r'(\w)\s+\1\b', r'\1', caption)  # Remove immediate word repetition like "the the"
+        
+        # Remove phrase repetition (e.g., "song painting song painting")
+        words = caption.split()
+        cleaned_words = []
+        for i, word in enumerate(words):
+            # Check for 2-word phrase repetition
+            if i >= 3 and words[i-1:i+1] == words[i-3:i-1]:
+                continue
+            # Check for 3-word phrase repetition  
+            elif i >= 5 and words[i-2:i+1] == words[i-5:i-2]:
+                continue
+            cleaned_words.append(word)
+        
+        caption = ' '.join(cleaned_words)
         
         # Remove trailing punctuation clusters
         caption = re.sub(r'[.\s]+$', '', caption)

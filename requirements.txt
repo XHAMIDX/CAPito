@@ -1,37 +1,21 @@
-# CAPito: Content-Aware Photo Image Text Optimizer
-# Core dependencies
+# Core ML and Computer Vision
 torch>=2.0.0
 torchvision>=0.15.0
-pillow>=9.0.0
-numpy>=1.21.0
-scipy>=1.7.0
+ultralytics>=8.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
 
-# Computer Vision
-ultralytics>=8.0.0  # YOLOv8 and SAM2
-opencv-python>=4.5.0
+# Transformers and NLP
+transformers>=4.30.0
+sentence-transformers>=2.2.0
 
-# NLP and Transformers
-transformers>=4.20.0
-tokenizers>=0.13.0
+# Graph Analysis
+networkx>=3.1
+matplotlib>=3.7.0
+scikit-learn>=1.3.0
 
-# Utilities
-requests>=2.25.0
-tqdm>=4.60.0
-packaging>=21.0  # For version parsing
-
-# Image processing
-matplotlib>=3.5.0
-
-# Configuration (optional, for future YAML support)
-pyyaml>=6.0
-
-# Development dependencies (optional)
-pytest>=7.0.0
-black>=22.0.0
-flake8>=4.0.0
-
-# AlphaCLIP dependencies
-# AlphaCLIP code is included as a submodule, but some pip deps need to be installed here
-loralib
-ftfy
-regex
+# Additional dependencies
+typing-extensions>=4.5.0
+pathlib2>=2.3.0
+dataclasses>=0.8; python_version<"3.7" 
