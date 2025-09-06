@@ -1,4 +1,4 @@
-# GET_CAPTION - Unified Image Captioning with Object Detection
+# CAPito: Content-Aware Photo Image Text Optimizer
 # Core dependencies
 torch>=2.0.0
 torchvision>=0.15.0
@@ -14,10 +14,10 @@ opencv-python>=4.5.0
 transformers>=4.20.0
 tokenizers>=0.13.0
 
-# Logging and utilities
-colorlog>=6.0.0
+# Utilities
+requests>=2.25.0
 tqdm>=4.60.0
-packaging>=21.0  # For version parsing (replaces pkg_resources)
+packaging>=21.0  # For version parsing
 
 # Image processing
 matplotlib>=3.5.0

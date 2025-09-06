@@ -1,22 +1,41 @@
-"""Setup script for GET_CAPTION project."""
+"""CAPito Setup Script - Content-Aware Photo Image Text Optimizer."""
 
 from setuptools import setup, find_packages
+from pathlib import Path
 
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+# Read the README file
+readme_path = Path(__file__).parent / "README.md"
+long_description = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
 
-with open("requirements.txt", "r", encoding="utf-8") as fh:
-    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+# Read requirements
+requirements_path = Path(__file__).parent / "requirements.txt"
+if requirements_path.exists():
+    with open(requirements_path, "r", encoding="utf-8") as f:
+        requirements = [
+            line.strip() for line in f
+            if line.strip() and not line.startswith("#")
+        ]
+else:
+    requirements = [
+        "torch>=2.0.0",
+        "torchvision>=0.15.0",
+        "pillow>=9.0.0",
+        "numpy>=1.21.0",
+        "opencv-python>=4.5.0",
+        "transformers>=4.20.0",
+        "ultralytics>=8.0.0",
+        "requests>=2.25.0",
+        "tqdm>=4.60.0"
+    ]
 
 setup(
-    name="get-caption",
-    version="1.0.0",
-    author="GET_CAPTION Team",
-    description="Unified Image Captioning with Object Detection using AlphaCLIP and ConZIC",
+    name="capito",
+    version="2.0.0",
+    author="CAPito Development Team",
+    description="Content-Aware Photo Image Text Optimizer",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    packages=find_packages(where="src"),
-    package_dir={"": "src"},
+    packages=find_packages(exclude=["tests", "examples"]),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",

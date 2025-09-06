@@ -1,8 +1,30 @@
-# GET_CAPTION: Unified Image Captioning with Object Detection
+# CAPito: Content-Aware Photo Image Text Optimizer
 
-A comprehensive pipeline that combines object detection, segmentation, and image captioning using AlphaCLIP and ConZIC methodologies. This project detects objects in images, generates precise masks, and produces detailed captions for each detected object using masked image regions.
+<div align="center">
 
-## Features
+![CAPito Logo](https://img.shields.io/badge/CAPito-v2.0.0-blue.svg)
+![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Status](https://img.shields.io/badge/status-refactored-brightgreen.svg)
+
+**A high-level, modular system for intelligent image captioning using Vision-Language Models**
+
+[Features](#features) • [Installation](#installation) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Examples](#examples)
+
+</div>
+
+## Overview
+
+CAPito is a comprehensive, refactored system that combines state-of-the-art computer vision and natural language processing to generate intelligent, context-aware captions for images. It integrates:
+
+- **🔍 AlphaCLIP**: Advanced Vision-Language Model for image understanding
+- **🎯 YOLO**: High-performance object detection
+- **🎭 SAM2**: Precision segmentation and masking
+- **🧠 BERT/RoBERTa**: Controllable text generation
+
+## Key Improvements in v2.0.0
+
+### ✨ Complete Refactoring
 
 - **Object Detection**: YOLOv8-based object detection with configurable confidence thresholds
 - **Advanced Segmentation**: SAM2 integration for precise object masks (with bbox fallback)
