@@ -44,17 +44,17 @@ class ModelManager:
         self.model_registry = {
             # AlphaCLIP models
             "clip_b16_grit1m_fultune_8xe.pth": {
-                "url": "https://github.com/SunzeY/AlphaCLIP/releases/download/v1.0/clip_b16_grit1m_fultune_8xe.pth",
+                "url": "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_b16_grit1m_fultune_8xe.pth",
                 "checksum": None,  # Add actual checksums
                 "type": "vlm"
             },
             "clip_b32_grit1m_fultune_8xe.pth": {
-                "url": "https://github.com/SunzeY/AlphaCLIP/releases/download/v1.0/clip_b32_grit1m_fultune_8xe.pth",
+                "url": "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_b32_grit1m_fultune_8xe.pth",
                 "checksum": None,
                 "type": "vlm"
             },
             "clip_l14_grit1m_fultune_8xe.pth": {
-                "url": "https://github.com/SunzeY/AlphaCLIP/releases/download/v1.0/clip_l14_grit1m_fultune_8xe.pth",
+                "url": "https://download.openxlab.org.cn/models/SunzeY/AlphaCLIP/weight/clip_l14_grit1m_fultune_8xe.pth",
                 "checksum": None,
                 "type": "vlm"
             },
