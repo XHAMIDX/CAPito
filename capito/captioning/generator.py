@@ -729,35 +729,186 @@ class CaptionGenerator:
         detection,
         mask = None
     ) -> str:
-        """Generate caption for a specific detected object using proper ConZIC approach."""
+        """Generate focused caption for a specific detected object."""
         try:
             class_name = detection.class_name
             
-            # Proper ConZIC initialization prompts - simple and open for iterative building
-            conzic_prompts = [
-                f"Image of a {class_name}",
-                f"A photo showing a {class_name}",
-                f"Picture of a {class_name}",
-                f"An image featuring a {class_name}",
-                f"A {class_name} in"
+            # Create focused object prompts that encourage specific descriptions
+            focused_prompts = [
+                f"A {class_name}",
+                f"The {class_name}",
+                f"{class_name}",
+                f"This {class_name}",
+                f"A detailed {class_name}"
             ]
             
             # Select prompt based on object (deterministic but varied)
-            prompt_idx = hash(class_name) % len(conzic_prompts)
-            prompt = conzic_prompts[prompt_idx]
+            prompt_idx = hash(class_name) % len(focused_prompts)
+            prompt = focused_prompts[prompt_idx]
             
-            # Generate using ConZIC iterative approach with mask
-            caption = self._generate_basic_caption(image, prompt, mask=mask, variation_seed=0)
+            # Generate focused object caption using a modified ConZIC approach
+            caption = self._generate_object_focused_caption(image, prompt, mask=mask, class_name=class_name)
             
             # Only fallback if generation completely fails
             if not caption or len(caption.strip()) <= len(prompt):
-                caption = f"A photo of a {class_name}"
+                caption = f"A {class_name}"
             
             return caption
             
         except Exception as e:
             self.logger.warning(f"Failed to generate object caption: {e}")
-            return f"A photo of a {detection.class_name}"
+            return f"A {detection.class_name}"
+    
+    def _generate_object_focused_caption(
+        self,
+        image: Union[Image.Image, np.ndarray],
+        prompt: str,
+        mask: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        class_name: str = "",
+        max_length: int = 8  # Shorter for focused object descriptions
+    ) -> str:
+        """
+        Generate a focused caption for a specific object using a modified ConZIC approach.
+        This method produces shorter, more object-centric descriptions.
+        """
+        # Use shorter generation for object-focused captions
+        text = prompt + " " + self.mask_token * max_length
+        batch = [self.lm_tokenizer.encode(text)]
+        
+        # Get image embeddings from AlphaCLIP
+        try:
+            if hasattr(self.vlm, 'compute_image_representation'):
+                image_embeds = self.vlm.compute_image_representation(image)
+            else:
+                # Use our AlphaCLIP wrapper's encode_image method
+                image_embeds = self.vlm.encode_image(image, mask=mask, normalize=True)
+        except Exception as e:
+            self.logger.warning(f"Failed to encode image: {e}")
+            return f"A {class_name}" if class_name else prompt
+        
+        if image_embeds is None:
+            return f"A {class_name}" if class_name else prompt
+        
+        # Initialize tracking variables
+        best_caption = prompt
+        best_clip_score = 0.0
+        
+        # Run fewer iterations for object captions (faster)
+        num_iterations = min(10, self.config.num_iterations // 2)
+        
+        for iter_num in range(num_iterations):
+            # Get current state
+            inp = torch.tensor(batch, device=self.device)
+            
+            # Find mask token positions
+            mask_positions = (inp == self.lm_tokenizer.mask_token_id).nonzero(as_tuple=True)
+            
+            if len(mask_positions[1]) == 0:
+                break  # No more mask tokens
+            
+            # Get predictions for mask tokens
+            with torch.no_grad():
+                outputs = self.lm_model(inp)
+                logits = outputs.logits
+                
+                # Apply stop word mask to prevent generating unwanted tokens
+                if hasattr(self, 'token_mask') and self.token_mask is not None:
+                    logits = logits + (self.token_mask - 1) * 1e9
+                
+                # Temperature sampling with focus on object-relevant words
+                temperature = self.config.temperature * 0.8  # Lower temp for focused generation
+                probs = F.softmax(logits / temperature, dim=-1)
+            
+            # Replace one mask token at a time
+            if len(mask_positions[1]) > 0:
+                # Select random mask position
+                pos_idx = torch.randint(0, len(mask_positions[1]), (1,)).item()
+                mask_pos = mask_positions[1][pos_idx].item()
+                
+                # Get text embeddings for current tokens
+                try:
+                    current_text = self.lm_tokenizer.decode(inp[0], skip_special_tokens=True)
+                    text_embeds = self.vlm.encode_text([current_text], normalize=True)
+                    
+                    # Compute similarity scores for candidate tokens
+                    candidate_tokens = torch.multinomial(probs[0, mask_pos], num_samples=50)
+                    candidate_scores = []
+                    
+                    for token_id in candidate_tokens:
+                        # Create candidate sentence
+                        temp_inp = inp.clone()
+                        temp_inp[0, mask_pos] = token_id
+                        candidate_text = self.lm_tokenizer.decode(temp_inp[0], skip_special_tokens=True)
+                        
+                        # Score with VLM
+                        try:
+                            candidate_text_embeds = self.vlm.encode_text([candidate_text], normalize=True)
+                            similarity = torch.cosine_similarity(image_embeds, candidate_text_embeds, dim=-1)
+                            candidate_scores.append(similarity.item())
+                        except:
+                            candidate_scores.append(0.0)
+                    
+                    # Select best candidate
+                    if candidate_scores:
+                        best_idx = np.argmax(candidate_scores)
+                        best_token = candidate_tokens[best_idx]
+                        inp[0, mask_pos] = best_token
+                        batch[0] = inp[0].cpu().tolist()
+                    
+                except Exception as e:
+                    # Fallback to random sampling
+                    sampled_token = torch.multinomial(probs[0, mask_pos], num_samples=1)
+                    inp[0, mask_pos] = sampled_token
+                    batch[0] = inp[0].cpu().tolist()
+            
+            # Check progress every few iterations
+            if iter_num % 3 == 0 or iter_num == num_iterations - 1:
+                current_caption = self.lm_tokenizer.decode(inp[0], skip_special_tokens=True)
+                
+                # Score full caption
+                try:
+                    full_score = self.vlm.compute_similarity(image, [current_caption], mask=mask, temperature=1.0)
+                    if isinstance(full_score, torch.Tensor):
+                        full_score = full_score.item()
+                    
+                    if full_score > best_clip_score:
+                        best_clip_score = full_score
+                        best_caption = current_caption
+                    
+                except Exception as e:
+                    pass  # Continue without scoring
+        
+        # Post-process the caption
+        final_caption = self._post_process_object_caption(best_caption, class_name)
+        return final_caption
+    
+    def _post_process_object_caption(self, caption: str, class_name: str = "") -> str:
+        """Post-process object caption to ensure it's focused and clean."""
+        if not caption:
+            return f"A {class_name}" if class_name else "An object"
+        
+        # Remove extra spaces and clean up
+        caption = ' '.join(caption.split())
+        
+        # If caption is too long, truncate at sentence boundary
+        if len(caption) > 100:
+            sentences = caption.split('.')
+            caption = sentences[0]
+            if not caption.endswith('.'):
+                caption += '.'
+        
+        # Ensure caption starts with appropriate article or is descriptive
+        if not caption.lower().startswith(('a ', 'an ', 'the ', class_name.lower())) and class_name:
+            if caption.lower().startswith(class_name.lower()):
+                caption = f"A {caption}"
+            else:
+                # Find where the actual description starts
+                words = caption.split()
+                if len(words) > 2 and words[0].lower() in ['picture', 'image', 'photo']:
+                    # Remove "picture of" type prefixes for object captions
+                    caption = ' '.join(words[2:]) if len(words) > 2 else caption
+        
+        return caption
     
     def cleanup(self) -> None:
         """Clean up model resources."""
